@@ -21,6 +21,7 @@ pyspectrum
 A code to compute theory power spectrum:
 - RSD model (same as in https://arxiv.org/abs/1904.08851v3), using pyregpt
 - BAO templates (isotropic and anisotropic)
+
 Apply survey geometry effects:
 - window functions, following Wilson et al. 2015: https://arxiv.org/abs/1511.07799, using pycute
 - integral constraint corrections, following de Mattia et al. 2019: https://arxiv.org/abs/1904.08851v3, using pycute
