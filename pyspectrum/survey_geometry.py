@@ -166,7 +166,7 @@ class SurveyGeometry(object):
 			self.toreal.integrate(*Pl,**kwargs)
 			Xil = self.convolution.convolve(self.toreal['convolution'])
 		else:
-			return [scipy.interp(kout,self.k,pl+sn*NS)/norm for kout,pl,sn in zip(self.kout,Pl[0],self.shotnoise)]
+			return [scipy.interp(kout,self.k,pl+sn*Ns)/norm for kout,pl,sn in zip(self.kout,Pl[0],self.shotnoise)]
 		if corrcic:
 			Xil -= self.cic[corrcic].ic(self.toreal['cic_{}'.format(corrcic)]) + self.cic[corrcic].real_shotnoise*Ns
 		if corrcicconv:
