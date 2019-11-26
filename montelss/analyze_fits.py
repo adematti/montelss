@@ -22,6 +22,19 @@ def nsigmas_to_quantiles_1d_sym(nsigmas):
 def nsigmas_to_quantiles_2d(nsigmas):
 	return 1. - scipy.exp(-nsigmas**2/2.)
 
+def sample_cic(grid,data):
+	if not isinstance(grid,list): grid = [grid]
+	pdf = scipy.zeros(map(len,grid),dtype=grid[0].dtype)
+	findex = scipy.array([scipy.searchsorted(g,d) - 1 for g,d in zip(grid,data)]).T
+	index = findex.astype(int)
+	dindex = findex-index
+	ishifts = scipy.array(scipy.meshgrid(*([[0,1]]*len(data)),indexing='ij')).reshape((len(data),-1)).T
+	for ishift in ishifts:
+		sindex = index + ishift
+		sweight = scipy.prod((1-dindex) + ishift*(-1+2*dindex),axis=-1)
+		scipy.add.at(pdf,tuple(sindex.T),sweight)
+	return pdf
+
 def density_1d(data,bins=20,nsigmas=2,method='gaussian_kde',bw_method='scott'):
 
 	if scipy.isscalar(nsigmas): nsigmas = [nsigmas]
@@ -30,6 +43,10 @@ def density_1d(data,bins=20,nsigmas=2,method='gaussian_kde',bw_method='scott'):
 		density = stats.gaussian_kde(data,bw_method='scott')
 		x = scipy.linspace(data.min(),data.max(),bins)
 		pdf = density(x)
+		pdf /= pdf.sum()
+	elif method == 'cic':
+		x = scipy.linspace(data.min(),data.max(),bins)
+		pdf = sample_cic(x,data)
 		pdf /= pdf.sum()
 	else:
 		H, xedges = scipy.histogram(data,bins=bins,density=True)
@@ -53,6 +70,10 @@ def density_2d(data,bins=[20,20],nsigmas=2,method='gaussian_kde',bw_method='scot
 		x,y = (scipy.linspace(d.min(),d.max(),b) for d,b in zip(data,bins))
 		xx,yy = scipy.meshgrid(x,y,indexing='ij')
 		pdf = density([xx.ravel(),yy.ravel()]).reshape(xx.shape).T
+		pdf /= pdf.sum()
+	elif method == 'cic':
+		x,y = (scipy.linspace(d.min(),d.max(),b) for d,b in zip(data,bins))
+		pdf = sample_cic([x,y],data).T
 		pdf /= pdf.sum()
 	else:
 		H, xedges, yedges = scipy.histogram2d(*data,bins=bins,density=True)
@@ -288,6 +309,21 @@ class EnsembleValues(object):
 		else:
 			raise ValueError('Cannot multiply {} by {} object.'.format(self.__class__,type(other)))
 
+	def zeros(self,dtype=scipy.float64):
+		return scipy.zeros(len(self),dtype=dtype)
+	
+	def ones(self,dtype=scipy.float64):
+		return scipy.ones(len(self),dtype=dtype)
+	
+	def falses(self):
+		return self.zeros(dtype=scipy.bool_)
+	
+	def trues(self):
+		return self.ones(dtype=scipy.bool_)
+	
+	def nans(self):
+		return self.ones()*scipy.nan
+
 	@classmethod
 	def combine(cls,ensembles,errors={},params=[]):
 		assert (scipy.diff(map(len,ensembles)) == 0).all()
@@ -395,6 +431,26 @@ class EnsembleValues(object):
 		self.logger.info('Saving covariance to {}.'.format(path_covariance))
 		with open(path_covariance,'w') as file:
 			file.write(output)
+
+	def save_grid(self,path,params=None,stats='values',bins=30,method='cic',bw_method='scott',header='',fmt='%.8e',delimiter=' ',**kwargs):
+		if params is None: params = self.parameters
+		data = scipy.array([self.get(stats)[par] for par in params])
+		points = []
+		if not isinstance(bins,list): bins = [bins]*len(data)
+		for d,b in zip(data,bins):
+			tmp = scipy.linspace(d.min(),d.max(),b) if scipy.isscalar(b) else b
+			points.append(tmp)
+		mpoints = scipy.meshgrid(*points,indexing='ij')
+		rpoints = [p.ravel() for p in mpoints]
+		if method == 'cic':
+			pdf = sample_cic(points,data).ravel()
+		else:
+			density = scipy.stats.gaussian_kde(data,bw_method=bw_method)
+			pdf = density(rpoints)
+		pdf /= pdf.max()
+		rpoints.append(pdf)
+		self.logger.info('Saving {} to {}.'.format(self.__class__.__name__,path))
+		scipy.savetxt(path,scipy.array(rpoints).T,header=header,fmt=fmt,delimiter=delimiter,**kwargs)
 
 def remove_ids(minimizer):
 	

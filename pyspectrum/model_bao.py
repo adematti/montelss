@@ -15,6 +15,7 @@ class ModelBAO(BasePowerSpectrumModel):
 		self.set_spectrum_lin()
 		self.set_spectrum_smooth()
 
+	@utils.classparams
 	def set_spectrum_smooth(self,kfit=scipy.linspace(0.005,0.5,100)):
 		from scipy import optimize
 		def model(k,ap0,ap1,ap2,ap3,ap4):

@@ -1,3 +1,4 @@
+import os
 import logging
 import scipy
 from scipy import constants
@@ -157,6 +158,35 @@ class AnalyzeMCMC(EnsembleValues):
 
 		#logger.info('Saving log file to {}.'.format(pathlog))
 		utils.save_latex(output,save)
+
+	def save_getdist(self,base,params=None,derived=None,ranges=None,lnposterior='lnposterior',weight='weight',ichain=None,fmt='%.8e',delimiter=' ',**kwargs):
+		if params is None: params = self.parameters
+		data = [self.values.get(weight,self.ones()),-self.values.get(lnposterior,self.zeros())] + self[params]
+		data = scipy.array(data).T
+		utils.mkdir(os.path.dirname(base))
+		path_chain = '{}.txt'.format(base) if ichain is None else '{}_{:d}.txt'.format(base,ichain)
+		self.logger.info('Saving chain to {}.'.format(path_chain))
+		scipy.savetxt(path_chain,data,header='',fmt=fmt,delimiter=delimiter,**kwargs)
+		if not isinstance(derived,list): derived = [derived]
+		derived = derived + [False]*len(params)
+		output = ''
+		for par,der in zip(params,derived):
+			if der: output += '{}* {}\n'.format(par,self.par_to_latex(par))
+			else: output += '{} {}\n'.format(par,self.par_to_latex(par))
+		path_params = '{}.paramnames'.format(base)
+		self.logger.info('Saving parameter names to {}.'.format(path_params))
+		with open(path_params,'w') as file:
+			file.write(output)
+		if ranges is not None:
+			output = ''
+			for par,ran in zip(params,ranges):
+				if not isinstance(ran,tuple): ran = (ran,ran)
+				ran = tuple('N' if r is None or r == scipy.inf else r for r in ran)
+				output += '{} {} {}\n'.format(par,ran[0],ran[1])
+			path_ranges = '{}.ranges'.format(base)
+			self.logger.info('Saving parameter ranges to {}.'.format(path_ranges))
+			with open(path_ranges,'w') as file:
+				file.write(output)
 
 from scipy import stats
 from matplotlib import pyplot,gridspec,cm,patches

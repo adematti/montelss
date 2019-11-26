@@ -4,6 +4,7 @@ import copy
 import logging
 import scipy
 from scipy import stats
+import iminuit
 from likelihood import Likelihood
 import utils
 
@@ -32,15 +33,25 @@ class Minimizer(object):
 		self.bestfit = {'values':{},'errors':{}}
 		self.profile = {}
 		self.contour = {}
+		self.grid = {}
 
 	def set_likelihoods(self,likelihoods):
 		if not isinstance(likelihoods,list): self.likelihoods = [likelihoods]
 		else: self.likelihoods = likelihoods
 
+	def update_minuitargs(self):
+		for key in self.bestfit['values']: #update with potential previous bestfit
+			if key in self.vary:
+				self.minuitargs[key] = self.bestfit['values'][key]
+				self.minuitargs['error_{}'.format(key)] = self.bestfit['errors'][key]
+			#if key in self.parameters: self.fitargs[key] = self.bestfit['values'][key]
+		#print self.vary		
+		#print [(key,self.fitargs[key]) for key in self.vary]
+		#print self.minuitargs
+
 	@utils.classparams
 	def setup(self,likelihoods,minuit={}):
 		
-		import iminuit
 		self.set_likelihoods(likelihoods)
 		del self.params['likelihoods']
 		self.ids = []
@@ -57,14 +68,7 @@ class Minimizer(object):
 		self.minuitargs.update(utils.get_minuit_args(self.fitargs))
 		self.minuitargs.update({'forced_parameters':self.parameters})
 		self.minuitargs.update(self.params['minuit'])
-		for key in self.bestfit['values']: #update with potential previous bestfit
-			if key in self.vary:
-				self.minuitargs[key] = self.bestfit['values'][key]
-				self.minuitargs['error_{}'.format(key)] = self.bestfit['errors'][key]
-			#if key in self.parameters: self.fitargs[key] = self.bestfit['values'][key]
-		#print self.vary		
-		#print [(key,self.fitargs[key]) for key in self.vary]
-		#print self.minuitargs
+		self.update_minuitargs()
 		self.minuit = iminuit.Minuit(self.chi2args,**self.minuitargs)
 	
 	@args_to_kwargs
@@ -156,10 +160,33 @@ class Minimizer(object):
 				xy = self.minuit.mncontour(par[0],par[1],**kwargs)[-1]
 				if par not in self.contour: self.contour[par] = {}
 				self.contour[par][sigma] = scipy.array(xy).T
+
+	@utils.classparams
+	def run_grid(self,grid={}):
+		params = grid.get('params',[])
+		points = grid.get('points',[])
+		if not len(points): return
+		self.update_minuitargs()
+		fitarg = copy.deepcopy(self.minuitargs)
+		for par in params: fitarg['fix_{}'.format(par)] = True
+		for par in params: fitarg['limit_{}'.format(par)] = (-scipy.inf,scipy.inf)
+		toret = []
+		self.logger.info('Grid of {} and size {:d}.'.format(params,len(points)))
+		for point in points:
+			pfitarg = copy.deepcopy(fitarg)
+			for par,val in zip(params,point): pfitarg[par] = val
+			minuit = iminuit.Minuit(self.chi2args,**pfitarg)
+			minuit.migrad(**self.params['migrad'])
+			tmp = dict(minuit.values)
+			tmp['chi2'] = self.chi2args(*[tmp[key] for key in self.parameters])
+			toret.append(tmp)
+		params = toret[0].keys()
+		toret = {par: scipy.array([ret[par] for ret in toret])}
+		self.grid = {par: scipy.concatenate([self.grid.get(par,[]),toret[par]],axis=0) for par in toret}
 		
 	@utils.getstateclass
 	def getstate(self,state):
-		for key in Likelihood._ARGS + ['ids','bestfit','dbestfit','profile','contour']:
+		for key in Likelihood._ARGS + ['ids','bestfit','dbestfit','profile','contour','grid']:
 			if hasattr(self,key): state[key] = getattr(self,key)
 		return state
 

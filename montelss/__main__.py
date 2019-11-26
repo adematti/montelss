@@ -19,6 +19,7 @@ def load_cmdline():
 	parser.add_argument('-load',type=str,help='file path to input',default=None,required=False)
 	parser.add_argument('-save',type=str,help='file path to output',required=True)
 	parser.add_argument('-seed',type=int,help='random seed',default=-1,required=False)
+	parser.add_argument('-grid',type=str,help='grid',default=None,required=False)
 	cmdline = parser.parse_args()
 
 	parameters = imp.load_source('config',cmdline.config).parameters
@@ -48,7 +49,7 @@ if __name__ == '__main__':
 	cmdline,parameters = load_cmdline()
 	likelihoods = load_likelihoods(cmdline,parameters)
 	
-	if any([key in cmdline.todo for key in ['migrad','minos','mnprofile','mncontour','info']]):
+	if any([key in cmdline.todo for key in ['migrad','minos','mnprofile','mncontour','grid','info']]):
 		if cmdline.load is not None:
 			try:
 				minimizer = Minimizer.load(cmdline.load,**parameters['minimizer'])
@@ -74,6 +75,14 @@ if __name__ == '__main__':
 
 	if 'mncontour' in cmdline.todo:
 		minimizer.run_mncontour()
+		minimizer.save(save=cmdline.save)
+	
+	if 'grid' in cmdline.todo:
+		grid = minimizer.params.get('grid',{})
+		if cmdline.grid is not None:
+			logger.info('Loading grid {}.'.format(cmdline.grid))
+			grid['points'] = scipy.loadtxt(cmdline.grid)
+		minimizer.run_grid(grid=grid)
 		minimizer.save(save=cmdline.save)
 
 	if 'info' in cmdline.todo:
