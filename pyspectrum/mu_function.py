@@ -29,6 +29,7 @@ class MuCount(BaseCount):
 		self.logger.info('Loading power spectrum: {}.'.format(path_spectrum))
 		get_data = load_data(path_spectrum,estimator='spectrum')
 		self.kedges = get_data('edges')
+		self.logger.info('Using k-edges: {:.4g} - {:.4g} ({:d}).'.format(self.kedges[0],self.kedges[-1],len(self.kedges)))
 		self.kedges = self.kedges[self.kedges<kmax]
 		self.logger.info('Using kmax = {:.4g}.'.format(kmax))
 
@@ -89,6 +90,7 @@ class MuCount(BaseCount):
 		for ikbin in range(nkedges):
 			self.logger.info('Computing (k,mu) in ({:d}/{:d}) k-bin.'.format(ikbin+1,nkedges))
 			mask = kcatalogue['ikbin'] == ikbin
+			#print kcatalogue[mask]['Position'][:,2]
 			self.result.append(pyreal2pcf.copy().run(randoms,kcatalogue[mask]))
 			
 	def __add__(self,other):

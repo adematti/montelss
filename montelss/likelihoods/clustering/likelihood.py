@@ -63,15 +63,17 @@ class BaseLikelihoodClustering(montelss.Likelihood):
 		#get_cov = utils.load_covariance(path_covariance,remove_sn=self.remove_sn)
 		get_cov = utils.load_covariance(path_covariance,remove_sn=True)
 		self.nobs = get_cov('nobs')
-		xmask,self.xcovariance,self.astddev = [],[],[]
+		xmask,self.xcovariance,self.mean,self.astddev = [],[],[],[]
 		for ell in self.ells:
 			x = get_cov('x',estimator=self.estimator,recon=self.recon,mode=self.mode,ell=ell)
 			self.logger.info('Setting {0}-range {1[0]:.4g} - {1[1]:.4g} of covariance for ell = {2}.'.format(self.xlabel,self.xrange[ell],ell))
 			xmask.append((x>=self.xrange[ell][0]) & (x<=self.xrange[ell][-1]))
 			self.xcovariance.append(x[xmask[-1]])
 			self.astddev.append(get_cov('stddev',estimator=self.estimator,recon=self.recon,mode=self.mode,ell=ell)[xmask[-1]])
+			self.mean.append(get_cov('mean',estimator=self.estimator,recon=self.recon,mode=self.mode,ell=ell)[xmask[-1]])
 
 		self.nbins = sum(map(len,self.xcovariance))
+		self.mean = scipy.concatenate(self.mean)
 		self.logger.info('Covariance parameters: (nbins,nobs) = ({:d},{}).'.format(self.nbins,self.nobs))
 		self.covariance = get_cov('covariance',estimator=self.estimator,recon=self.recon,mode=self.mode,ell=self.ells)
 
@@ -128,31 +130,68 @@ class BaseLikelihoodClustering(montelss.Likelihood):
 		if 'sliced' not in self.invert_covariance:
 			self.logger.info('Slicing covariance.')
 			self.invcovariance = self.invcovariance[scipy.ix_(xmaskall,xmaskall)]
+	
+	def fisher_info(self):
+		return self.mean.dot(self.precision).dot(self.mean.T)
+	
+	def D(self):
+		return (self.nbins+1.)/(self.nobs-1.)
+	
+	def A(self):
+		return 2./(self.nobs-self.nbins-1.)/(self.nobs-self.nbins-4.)
 
-	def set_precision(self,nbins=None,nobs=None,nvary=None):
+	def B(self):
+		return (self.nobs-self.nbins-2.)/2.*self.A()
 
-		if nbins is None: nbins = self.nbins
-		if nobs is None: nobs = self.nobs
-		if nvary is None: nvary = self.nvary
+	def C1(self,f=1.):
+		return self.A()*f + self.B()*f*(self.nbins+1.)
+
+	def C2(self,f=1.):
+		return self.A()*f**2 + self.B()*f*(self.neff+f)
+
+	def set_lkl(self):
+
 		self.precision = self.invcovariance.copy()
-		self.scale_parameter_covariance = 1.
-
+		# Percival et al. 2013 arXiv: 1312.4841v1
 		if 'hartlap' in self.invert_covariance:
-			factor = (nobs-nbins-2.)/(nobs-1.)
+			factor = 1.-self.D()
 			self.logger.info('Applying hartlap factor {:.4f} to precision matrix.'.format(factor))
-			self.logger.info('Using parameters: (nbins,nobs,nvary) = ({:d},{},{:d}).'.format(nbins,nobs,nvary))
+			self.logger.info('Using parameters: (nbins,nobs) = ({:d},{}).'.format(self.nbins,self.nobs))
 			if not (factor > 0.) & (factor < 1.):
 				raise ValueError('There is something wrong with the Hartlap factor. Are you sure the covariance matrix is built from mocks?')
 			self.precision *= factor
-			A = 2./(nobs-nbins-1.)/(nobs-nbins-4.)
-			B = (nobs-nbins-2.)/2.*A
-			self.scale_parameter_covariance = (1.+B*(nbins-nvary))/(1.+A+B*(nvary+1.))
-			self.logger.info('I will apply hartlap factor {:.4f} to parameter covariance.'.format(self.scale_parameter_covariance))
-			if 'datafrommocks' in self.invert_covariance:
-				factor = (nobs-1.)/(nobs-nbins-2.)
-				self.logger.info('I will apply extra factor {:.4f} to parameter covariance, as data is included in the covariance matrix.'.format(factor))
-				self.scale_parameter_covariance *= factor
+		if self.type_lkl == 'tdistrib':
+			self.logger.info('Setting t-likelihood for {} {}.'.format(self.__class__.__name__,self.id))
+			def lnlkl(**kwargs):
+				delta = self.data-self._model
+				return -self.nobs/2.*scipy.log(1. + delta.dot(self.invcovariance).dot(delta.T)/(self.nobs - 1.))
+		else:
+			self.logger.info('Setting gaussian likelihood for {} {}.'.format(self.__class__.__name__,self.id))
+			def lnlkl(**kwargs):
+				delta = self.data-self._model
+				return -0.5*delta.dot(self.precision).dot(delta.T)
+		self.lnlkl = lnlkl
+	
+	def set_neff(self,fisher_info):
+		info = self.fisher_info()
+		self.neff = 0.
+		for par in self.vary:
+			ff = info/fisher_info[par]
+			self.logger.info('Fisher fraction of {:.4f} for parameter {}.'.format(ff,par))
+			self.neff += ff
+		self.logger.info('Effective number of parameters in {} is {:.4f}.'.format(self.id,self.neff))
 
+	def set_scale_parameter_covariance(self,C1,C2,D):
+		self.scale_parameter_covariance = {par:1. for par in self.vary}
+		self.scale_mock_parameter_covariance = {par:1. for par in self.vary}
+		# Percival et al. 2013 arXiv: 1312.4841v1
+		if (self.type_lkl != 'tdistrib') and ('hartlap' in self.invert_covariance):
+			for par in self.vary:
+				self.scale_parameter_covariance[par] = (1. + C1[par] - C2[par])/(1. + C2[par])
+				self.logger.info('I will apply factor {:.4f} to variance of parameter {}.'.format(self.scale_parameter_covariance[par],par))
+				self.scale_mock_parameter_covariance[par] = self.scale_parameter_covariance[par]/D[par]
+				self.logger.info('You will have to apply factor {:.4f} to mock variance of parameter {}.'.format(self.scale_mock_parameter_covariance[par],par))
+		
 	@property
 	def xlabel(self):
 		if 'spectrum' in self.estimator: return 'k'
@@ -177,6 +216,10 @@ class BaseLikelihoodClustering(montelss.Likelihood):
 	@property
 	def scale_data_covariance(self):
 		return self.params['scalecovariance']
+
+	@property
+	def type_lkl(self):
+		return self.params.get('typelkl','chi2')
 
 	@property
 	def estimator(self):
@@ -257,19 +300,34 @@ class BaseLikelihoodClustering(montelss.Likelihood):
 			self.geometry.set_kout(kout={ell:self.xdata[ill] for ill,ell in enumerate(self.ells)})
 		else:
 			self.geometry.set_sout(sout={ell:self.xdata[ill] for ill,ell in enumerate(self.ells)})
+		self.set_lkl()
 
 	def prepare(self,others):
-		nbins,nobs,vary = 0,[],set()
+		fisher_info = {}
 		for other in others:
 			if isinstance(other,self.__class__):
-				nbins += other.nbins
-				nobs.append(other.nobs)
-				vary |= set(other.vary)
-		self.set_precision(nbins=nbins,nobs=scipy.mean(nobs),nvary=len(vary))
+				info = other.fisher_info()
+				for par in other.vary:
+					if par in fisher_info:
+						fisher_info[par] += info
+					else:
+						fisher_info[par] = info
+		C1,C2,D = {par:0. for par in self.vary},{par:0. for par in self.vary},{par:0. for par in self.vary}
+		for other in others:
+			if isinstance(other,self.__class__):
+				info = other.fisher_info()
+				other.set_neff(fisher_info)
+				for par in other.vary:
+					if par in self.vary:
+						f = info/fisher_info[par]
+						C1[par] += other.C1(f=f)
+						C2[par] += other.C2(f=f)
+						D[par] += f*(1.-other.D())
+		self.set_scale_parameter_covariance(C1,C2,D)
 
 	def getstate(self):
 		state = super(BaseLikelihoodClustering,self).getstate()
-		for key in ['xdata','adata','data','xcovariance','astddev','invcovariance','nobs','ells','ills']:
+		for key in ['xdata','adata','data','xcovariance','astddev','mean','invcovariance','nobs','ells','ills']:
 			if hasattr(self,key): state[key] = getattr(self,key)
 		state['__class__'] = self.__class__.__name__
 		return state
@@ -311,35 +369,33 @@ class BaseLikelihoodClustering(montelss.Likelihood):
 		self._model = scipy.concatenate(self.amodel(**kwargs),axis=-1)
 		return self._model
 
-	def lnlkl(self,**kwargs):
-		delta = self.data-self._model
-		return -0.5*delta.dot(self.precision).dot(delta.T)
-
 	def derived_parameters(self,values,errors={}):
-		self.logger.info('Scaling parameter covariance of {} {} by {:.4f}.'.format(self.__class__.__name__,self.id,self.scale_parameter_covariance))
-		scale = scipy.sqrt(self.scale_parameter_covariance)
 		sigma8 = self.model_sp.sigma8*values.get('rsigma8',1.)
 		dvalues = {par:1.*val for par,val in values.items() if par in self.fitargs}
-		derrors = {par:1.*val for par,val in errors.items() if par in self.fitargs}
-		for key in dvalues.keys():
+		def mults8(key):
 			for par in ['f','b']:
-				if key.startswith(par) and not key.startswith('beta'):
-					dvalues['{}sigma8'.format(key)] = values[key]*sigma8
-					if key in errors: derrors['{}sigma8'.format(key)] = errors[key]*sigma8
-		for key in derrors.keys(): derrors[key] = scale*derrors[key]
+				if key.startswith(par) and not key.startswith('beta') and 'sigma8' not in key: return True
+			return False
+		for key in dvalues.keys():
+			if mults8(key): dvalues['{}sigma8'.format(key)] = values[key]*sigma8
+		derrors = {par:1.*val for par,val in errors.items() if par in self.fitargs}
+		for key in derrors.keys():
+			if key in self.vary: derrors[key] = scipy.sqrt(self.scale_parameter_covariance[key])*errors[key]
+			if mults8(key): derrors['{}sigma8'.format(key)] = derrors[key]*sigma8
 		dvalues['sigma8'] = sigma8
 		tmp = values.values()[0]
 		if not scipy.isscalar(tmp): dvalues['sigma8'] = scipy.ones_like(tmp)*dvalues['sigma8'] # to get the correct shape
 		derrors['sigma8'] = 0.*dvalues['sigma8']
 		dlatex = {par:val for par,val in self.latex.items()}
 		for key in dlatex.keys():
-			for par in ['f','b']:
-				if key.startswith(par) and not key.startswith('beta') and 'sigma8' not in key:
-					dlatex['{}sigma8'.format(key)] = '{}\\sigma_{{8}}'.format(self.latex[key])
+			if mults8(key): dlatex['{}sigma8'.format(key)] = '{}\\sigma_{{8}}'.format(self.latex[key])
 		dlatex['sigma8'] = '\\sigma_{{8}}'
 		dsorted = pyspectrum.utils.sorted_parameters(dlatex.keys())
+		params = {key:val for key,val in self.params.items()}
+		params['scalecov'] = self.scale_parameter_covariance
+		params['scalemockcov'] = self.scale_mock_parameter_covariance
 
-		return dvalues,derrors,self.scale_parameter_covariance,dlatex,dsorted
+		return dvalues,derrors,dlatex,dsorted,params
 
 	@property
 	def ndata(self):
@@ -417,6 +473,7 @@ class LikelihoodClusteringCombiner(BaseLikelihoodClustering):
 			self.invcovariance *= self.nobs
 			self.astddev /= scipy.sqrt(self.nobs)
 			self.logger.info('Dividing covariance matrix by the number of observations: {:d}.'.format(self.nobs))
+		self.set_lkl()
 
 	def set_default(self):
 		for likelihood in self: 
@@ -438,7 +495,7 @@ class LikelihoodClusteringCombiner(BaseLikelihoodClustering):
 		#get_cov = utils.load_covariance(path_covariance,remove_sn=self.remove_sn)
 		get_cov = utils.load_covariance(path_covariance,remove_sn=True)
 		self.nobs = get_cov('nobs')
-		xmask,self.xcovariance,self.astddev = [],[],[]
+		xmask,self.xcovariance,self.mean,self.astddev = [],[],[],[]
 		list_estimator,list_recon,list_mode,list_ells = [],[],[],[]
 		for likelihood in self:
 			xlabel = 'k' if 'spectrum' in likelihood.estimator else 's'
@@ -448,12 +505,14 @@ class LikelihoodClusteringCombiner(BaseLikelihoodClustering):
 				xmask.append((x>=likelihood.xrange[ell][0]) & (x<=likelihood.xrange[ell][-1]))
 				self.xcovariance.append(x[xmask[-1]])
 				self.astddev.append(get_cov('stddev',estimator=likelihood.estimator,recon=likelihood.recon,mode=likelihood.mode,ell=ell)[xmask[-1]])
+				self.mean.append(get_cov('mean',estimator=likelihood.estimator,recon=likelihood.recon,mode=likelihood.mode,ell=ell)[xmask[-1]])
 				list_estimator.append(likelihood.estimator)
 				list_recon.append(likelihood.recon)
 				list_mode.append(likelihood.mode)
 				list_ells.append(ell)
 
 		self.nbins = sum(map(len,self.xcovariance))
+		self.mean = scipy.concatenate(self.mean)
 		self.logger.info('Covariance parameters: (nbins,nobs) = ({:d},{}).'.format(self.nbins,self.nobs))
 		self.covariance = get_cov('covariance',estimator=list_estimator,recon=list_recon,mode=list_mode,ell=list_ells)
 
@@ -485,13 +544,15 @@ class LikelihoodClusteringCombiner(BaseLikelihoodClustering):
 			likelihood.plot(*args,**kwargs)
 
 	def derived_parameters(self,values,errors={},latex={}):
-		dvalues,derrors,dlatex,dsorted = {},{},{},[]
+		dvalues,derrors,dlatex,dsorted,dparams = {},{},{},[],{}
 		for likelihood in self:
 			likelihood.scale_parameter_covariance = self.scale_parameter_covariance
-			values_,errors_,_,latex_,sorted_ = likelihood.derived_parameters(values,errors=errors)
-			dvalues.update(values_);derrors.update(errors_);dlatex.update(latex_)
+			likelihood.scale_mock_parameter_covariance = self.scale_mock_parameter_covariance
+			values_,errors_,latex_,sorted_,dparams_ = likelihood.derived_parameters(values,errors=errors)
+			dvalues.update(values_);derrors.update(errors_);dlatex.update(latex_);dparams.update(dparams_)
 			dsorted += [par for par in sorted_ if par not in dsorted]
-		return dvalues,derrors,self.scale_parameter_covariance,dlatex,dsorted
+		dparams.update(self.params)
+		return dvalues,derrors,dlatex,dsorted,dparams
 
 	"""
 	def getstate(self):

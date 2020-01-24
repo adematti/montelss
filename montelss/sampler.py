@@ -177,11 +177,13 @@ class BaseSampler(object):
 
 		totallikelihood = sum(self.likelihoods)
 		totallikelihood.set_default()
-		for key in totallikelihood._ARGS + ['lnposterior','solve_update_analytic']:
+		for key in totallikelihood._ARGS + ['solved','lnpriors','lnlkls','solve_update_analytic']:
 			setattr(self,key,getattr(totallikelihood,key))
 
 		self.latex['lnposterior'] = '\\ln{\\mathcal{L}}'
+		for id in self.ids: self.latex['lnposterior_{}'.format(id)] = '\\ln{{\\mathcal{{L}}}}_{}'.format(id)
 		self.latex['chi2'] = '\\chi^{2}'
+		self.logger.info('Fitted parameters: {}.'.format(self.fitted))
 
 	@utils.setstateclass
 	def setstate(self,state):
@@ -245,16 +247,22 @@ class BaseSampler(object):
 
 	@utils.classparams
 	def init_from_bestfit(self,bestfit,nwalkers,pdf='gaussian_diag',seed=None):
-		self.logger.info('Setting initial values and errors from migrad.')
-		self.fitted_values = [bestfit['values'][v] for v in self.fitted]
-		self.fitted_errors = []
+		self.logger.info('Setting initial values from migrad.')
+		self.fitted_values,self.fitted_errors = [],[]
 		for v in self.fitted:
+			tmp = bestfit['values'][v]
+			self.logger.info('Setting initial value for {} from migrad: {:.4g}.'.format(v,tmp))
+			self.fitted_values.append(tmp)
 			if 'minos' in bestfit and v in bestfit['minos']['upper']:
-				self.logger.info('Setting initial errors for {} from minos.'.format(v))
-				self.fitted_errors.append((bestfit['minos']['upper'][v]-bestfit['minos']['lower'][v])/2.)
+				tmp = (bestfit['minos']['upper'][v]-bestfit['minos']['lower'][v])/2.
+				self.logger.info('Setting initial error for {} from minos: {:.4g}.'.format(v,tmp))
+				self.fitted_errors.append(tmp)
 			else:
-				self.fitted_errors.append(bestfit['errors'][v])
+				tmp = bestfit['errors'][v]
+				self.logger.info('Setting initial error for {} from migrad: {:.4g}.'.format(v,tmp))
+				self.fitted_errors.append(tmp)
 		self.fixed_values = {v:bestfit['values'][v] for v in self.fixed}
+		self.logger.info('Fixed values: {}.'.format(self.fixed_values))
 		self.reset()
 
 	@utils.classparams
@@ -268,27 +276,36 @@ class BaseSampler(object):
 		self.reset()
 
 	def init_from_previous(self):
-		self.logger.info('Setting initial values and errors from previous run.')
+		self.logger.info('Setting initial values from previous run.')
 		self.first = scipy.asarray([self.chain[par][-1] for par in self.fitted]).T
 
 	def lnposteriorargs(self,args,**fixed):
 		kwargs = {}
 		kwargs.update({key:val for key,val in zip(self.fitted,args)})
 		kwargs.update(fixed)
+		kwargs.update({par:scipy.nan for par in self.solved()})
+		lnpriors = self.lnpriors(**kwargs)
+		if scipy.isinf(sum(lnpriors)): return -scipy.inf,{}
 		solved = self.solve_update_analytic(**kwargs)
 		kwargs.update(solved)
 		solved.update(fixed)
-		return self.lnposterior(**kwargs),solved
+		lnpriors = self.lnpriors(**kwargs)
+		lnlkls = self.lnlkls(**kwargs)
+		lnposteriors = [lnlkl + lnprior for lnlkl,lnprior in zip(lnlkls,lnpriors)]
+		for id,lnposterior in zip(self.ids,lnposteriors):
+			solved['lnposterior_{}'.format(id)] = lnposterior
+			#print id,solved['lnposterior_{}'.format(id)]
+		return sum(lnposteriors),solved
 
 	def get_dchain(self,chain):
 		values = chain.as_dict()
 		for like in self.likelihoods:
-			values_,errors,scalecov,latex,sorted = like.derived_parameters(chain.as_dict())
+			values_,errors,latex,sorted,params = like.derived_parameters(chain.as_dict())
 			values.update(values_)
 			self.latex.update(latex)
+			chain.params['likelihood'] = params
 			chain.sorted += [par for par in sorted if par not in chain.sorted]
 		chain.values = values
-		chain.params['scalecov'] = scalecov
 		chain['chi2'] = -2.*chain['lnposterior']
 		return chain
 
@@ -316,7 +333,6 @@ class BaseSampler(object):
 		for iflush in range(sflush):
 			self._run_(nsteps=min(nflush,nsteps-nrun))
 			self.first = scipy.asarray([self.chain[par][-1] for par in self.fitted]).T
-			self.solved = []
 			nrun += nflush
 			if nrun < nsteps: self.save()
 		if self.pool is not None: self.pool.close()

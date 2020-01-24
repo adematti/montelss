@@ -96,6 +96,7 @@ def setup_model_tns():
 	
 	model.set_cosmology()
 	model.set_spectrum_lin()
+	model.set_spectrum_nonlin()
 	#model.set_spectrum_2loop()
 	#model.set_spectrum_1loop()
 	#model.set_bias_1loop()
@@ -231,24 +232,20 @@ def plot_model_tns_spectrum_lin(scale='kloglog',title='Class outputs',path=os.pa
 	ax.legend(**{'loc':1,'ncol':2,'fontsize':labelsize,'framealpha':0.5,'frameon':False})
 	utils.savefig(path,dpi=dpi,bbox_inches='tight',pad_inches=0.1)
 
-def plot_model_tns_spectrum_2loop(scale='klinlin',title='RegPT outputs',path=os.path.join(dirplot,'spectrum_2loop.png')):
+def plot_model_tns_spectrum_nloop(nloop=2,scale='klinklin',title='RegPT outputs',path=os.path.join(dirplot,'spectrum_{:d}loop.png')):
 	
 	model = ModelTNS.load(parameters['ModelTNS']['save'])
 	scaling = scalings[scale]
 	ax = plot_baseline(scaling,title)
-	ax.set_xlim(model.spectrum_lin.k[0],model.spectrum_lin.k[-1])
-	ax.set_xlim(0.009,0.012)
-	
-#	for key,label in zip(['spectrum_lin','spectrum_nowiggle','spectrum_2loop_dd','spectrum_2loop_dt','spectrum_2loop_tt'],
-#		['pk_lin','pk_nowiggle','pk_dd','pk_dt','pk_tt']):
-	for key,label in zip(['spectrum_2loop_dd','spectrum_2loop_dt','spectrum_2loop_tt'],
-		['pk_dd','pk_dt','pk_tt']):
-		k = getattr(model,key)['k']
-		pk = getattr(model,key).pk()
+
+	for key,label in zip(['dd','dt','tt'],['pk_dd','pk_dt','pk_tt']):
+		k = getattr(model,'spectrum_{:d}loop_{}'.format(nloop,key))['k']
+		pk = getattr(model,'spectrum_{:d}loop_{}'.format(nloop,key)).pk()
 		ax.plot(*scaling['func'](k,pk),label=utils.text_to_latex(label),linestyle='-')
+	ax.plot(*scaling['func'](model.spectrum_halofit['k'],model.spectrum_halofit.pk()),label='halofit',linestyle='-')
 
 	ax.legend(**{'loc':1,'ncol':2,'fontsize':labelsize,'framealpha':0.5,'frameon':False})
-	utils.savefig(path,dpi=dpi,bbox_inches='tight',pad_inches=0.1)
+	utils.savefig(path.format(nloop),dpi=dpi,bbox_inches='tight',pad_inches=0.1)
 
 def plot_model_tns_terms_spectrum_2loop(scale='kloglog',title='RegPT outputs',path=os.path.join(dirplot,'terms_spectrum_2loop.png')):
 	
@@ -573,15 +570,16 @@ def check_ref():
 	
 	print ref['k'].min(), ref['k'].max()
 
-#setup_model_tns()
-setup_model_bao()
-plot_model_bao_wiggles()
+setup_model_tns()
+#setup_model_bao()
+#plot_model_bao_wiggles()
 #plot_model_bao_iso()
 #plot_model_bao_aniso()
 #plot_model_tns_spectrum_lin()
 #plot_model_tns()
 #plot_effect_ap()
 #plot_survey_geometry()
+plot_model_tns_spectrum_nloop()
 #plot_model_tns_terms_spectrum_2loop()
 #plot_model_tns_spectrum_2loop()
 #plot_model_tns_terms_A_B_2loop()

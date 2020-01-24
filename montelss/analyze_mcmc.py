@@ -6,7 +6,7 @@ from numpy import fft
 import utils
 import cosmology
 from cosmology import Cosmology
-from analyze_fits import EnsembleValues,density_1d,density_2d,nsigmas_to_deltachi2,nsigmas_to_quantiles_1d_sym
+from analyze_fits import EnsembleValues,Mesh,nsigmas_to_deltachi2,nsigmas_to_quantiles_1d,nsigmas_to_quantiles_1d_sym
 
 class AnalyzeMCMC(EnsembleValues):
 	
@@ -82,83 +82,6 @@ class AnalyzeMCMC(EnsembleValues):
 		extra = self.run_class(cosmo,Cosmology.compute_fs8_bao,todo_kwargs={'z':z})
 		for par in extra: self.latex[par] = cosmology.par_to_latex(par) + '(z={:.3f})'.format(z)
 
-	def comparison_stats_to_latex(self,save,params=None,bestfit=None,precision=2,fmt='vertical',interval_kwargs={}):
-		
-		if params is None: params = self.parameters
-
-		output = ''
-		output += '\\documentclass{report}'
-		output += '\\usepackage[top=2.5cm, bottom=2.5cm, left=1cm, right=1cm]{geometry}\n'
-		output += '\\begin{document}\n'
-		output += '\\begin{center}\n'
-		output += 'All stats, chains with {:d} samples\n'.format(len(self))
-		output += '\\end{center}\n\n'
-
-		values = bestfit['values']
-		errors = bestfit['errors']
-		def prec(val):
-			return utils.to_precision(val,precision=precision)
-		def err(val,u=0.1,d=None):
-			return utils.to_error(val,u=u,v=d,precision=precision)
-
-		data = [[],[]]
-		rows = ['best fit','quadratic']
-		for par in params:
-			data[0] += ['${0}$'.format(*err(values[par],u=errors[par]))]
-			data[1] += ['${1}$'.format(*err(values[par],u=errors[par]))]
-		if 'minos' in bestfit:
-			data += [[]]
-			rows += ['profiling']
-			uplow = bestfit['minos']
-			for par in params:
-				try: data[-1] += ['${{}}^{{{1}}}_{{{2}}}$'.format(*err(values[par],u=uplow['upper'][par],d=uplow['lower'][par]))]
-				except KeyError: data[-1] += ['']
-			if 'upper_valid' in uplow:
-				data += [[]]
-				rows += ['valid']
-				for par in params:
-					try: data[-1] += ['${{}}^{{{0}}}_{{{1}}}$'.format(uplow['upper_valid'][par],uplow['lower_valid'][par])]
-					except KeyError: data[-1] += ['']
-		rows += ['mean','median','maximum','std','quantiles','min interval']
-		errors = {par:self.std(par) for par in params}
-		data += [[]]
-		for par in params: data[-1] += ['${0}$'.format(*err(self.mean(par),u=errors[par]))]
-		data += [[]]
-		for par in params: data[-1] += ['${0}$'.format(*err(self.percentile(par,q=50.),u=errors[par]))]
-		data += [[]]
-		for par in params: data[-1] += ['${0}$'.format(*err(self.maximum(par),u=errors[par]))]
-		data += [[]]
-		for par in params: data[-1] += ['${1}$'.format(*err(self.mean(par),u=errors[par]))]
-		data += [[]]
-		for par in params:
-			interval = self.quantile(par,q=nsigmas_to_quantiles_1d_sym(nsigmas=1.))
-			data[-1] += ['${{}}^{{{1}}}_{{{0}}}$'.format(err(interval[0],u=interval[0])[0],err(interval[1],u=interval[1])[0])]
-		data += [[]]
-		for par in params:
-			interval = self.interval(par,nsigmas=1.,**interval_kwargs)
-			data[-1] += ['${{}}^{{{1}}}_{{{0}}}$'.format(err(interval[0],u=interval[0])[0],err(interval[1],u=interval[1])[0])]
-		
-		output += '\\begin{center}\n'
-		columns = ['${}$'.format(self.latex[par]) if par in self.latex else par for par in params]
-	
-		if fmt == 'horizontal':
-			output += utils.array_to_latex(data=scipy.asarray(data),columns=columns,rows=rows[:len(data)],alignment='l',fmt=None)
-		else:
-			output += utils.array_to_latex(data=scipy.asarray(data).T,columns=rows[:len(data)],rows=columns,alignment='l',fmt=None)
-	
-		output += '\n\\end{center}\n'
-
-		output += 'Correlation matrix from chains\n'
-		output += '\\begin{center}\n'
-		latex = [self.par_to_label(par) for par in params]
-		output += utils.array_to_latex(self.correlation(params),latex,latex,alignment='c',fmt='.3f')
-		output += '\\end{center}\n\n'
-
-		output += '\\end{document}\n'
-
-		#logger.info('Saving log file to {}.'.format(pathlog))
-		utils.save_latex(output,save)
-
 	def save_getdist(self,base,params=None,derived=None,ranges=None,lnposterior='lnposterior',weight='weight',ichain=None,fmt='%.8e',delimiter=' ',**kwargs):
 		if params is None: params = self.parameters
 		data = [self.values.get(weight,self.ones()),-self.values.get(lnposterior,self.zeros())] + self[params]
@@ -213,7 +136,7 @@ def lighten_color(color,amount=0.5):
 	lum = 1 - amount * (1 - c[1]) if amount > 0 else - amount * c[1]
 	return colorsys.hls_to_rgb(c[0], lum, c[2])
 
-def plot_density_contour(ax,data,bins=[20,20],nsigmas=2,method='gaussian_kde',bw_method='scott',ndof=2,color='blue',lighten=-0.5,**contour_kwargs):
+def plot_density_contour(ax,x,y,pdf,bins=[20,20],nsigmas=2,ndof=2,color='blue',lighten=-0.5,**contour_kwargs):
 	
 	from scipy import stats,optimize	
 	
@@ -221,7 +144,7 @@ def plot_density_contour(ax,data,bins=[20,20],nsigmas=2,method='gaussian_kde',bw
 
 	Parameters
 	----------
-	data : numpy.ndarray (# of dims, # of data)
+	x,y,pdf : 2d density 
 	bins : bins
 	ax : matplotlib.Axes
 		plots the contour to this axis.
@@ -230,14 +153,20 @@ def plot_density_contour(ax,data,bins=[20,20],nsigmas=2,method='gaussian_kde',bw
 
 	"""
 	if scipy.isscalar(nsigmas): nsigmas = 1 + scipy.arange(nsigmas)
-	x,y,pdf,levels = density_2d(data,bins=bins,nsigmas=nsigmas,method=method,bw_method=bw_method,ndof=ndof)
+	pdf = pdf/pdf.sum()
+
+	def find_confidence_interval(x, confidence_level):
+		return pdf[pdf > x].sum() - confidence_level
+
+	to_quantiles = nsigmas_to_quantiles_2d if ndof == 1 else nsigmas_to_quantiles_1d
+	levels = [optimize.brentq(find_confidence_interval,0.,1.,args=(to_quantiles(nsigma))) for nsigma in nsigmas]
 	if isinstance(color,list):
 		colors = color
 	else:
 		colors = [color]
 		for icol in nsigmas[:-1]: colors.append(lighten_color(colors[-1],amount=lighten))
 
-	contour = ax.contourf(x,y,pdf,levels=levels[::-1]+[pdf.max()+1.],colors=colors,**contour_kwargs)
+	contour = ax.contourf(x,y,pdf.T,levels=levels[::-1]+[pdf.max()+1.],colors=colors,**contour_kwargs)
 
 	return contour
 
@@ -267,9 +196,9 @@ def plot_gaussian_contour(ax,mean=[0.,0.],covariance=[1.,1.,0.],nsigmas=2,ndof=2
 		ax.plot(x,y,color=color,**contour_kwargs)
 
 
-def plot_density_profile(ax,data,bins=20,method='gaussian_kde',bw_method='scott',normalize='max',**profile_kwargs):
+def plot_density_profile(ax,x,pdf,normalize='max',**profile_kwargs):
 
-	x,pdf,_ = density_1d(data,bins=bins,nsigmas=[],method=method,bw_method=bw_method)
+	pdf = pdf/pdf.sum()
 
 	if normalize == 'max': pdf /= pdf.max()
 	plot = ax.plot(x,pdf,**profile_kwargs)
@@ -319,6 +248,9 @@ dpi = 200
 
 def plot_corner_chains(chains,params=[],labels=[],truths=[],gaussian=None,other_profile=None,other_contour=None,title='',colors=prop_cycle.by_key()['color'],truths_kwargs={'linestyle':'--','linewidth':1,'color':'k'},profile_kwargs={},contour_kwargs={},gaussian_profile_kwargs={},gaussian_contour_kwargs={},other_profile_kwargs={},other_contour_kwargs={},path='corner.png'):
 
+
+	keywords_plot = ['color','alpha','linestyle','normalize']	
+	
 	profile = {'bins':60,'method':'gaussian_kde','normalize':'max'}
 	profile.update(profile_kwargs)
 	profile_kwargs = profile
@@ -370,7 +302,11 @@ def plot_corner_chains(chains,params=[],labels=[],truths=[],gaussian=None,other_
 	for ipar1,par1 in enumerate(params):
 		ax = pyplot.subplot(gs[ipar1,ipar1])
 		for ichain,chain in enumerate(chains):
-			plot_density_profile(ax,chain[par1],color=colors[ichain],label=labels[ichain],**profile_kwargs)
+			if not isinstance(chain,Mesh):
+				mesh = chain.to_mesh(params=[par1],**{key:val for key,val in profile_kwargs.items() if key not in keywords_plot})
+			else: mesh = chain
+			x,pdf = mesh(params=[par1])
+			plot_density_profile(ax,x,pdf,color=colors[ichain],label=labels[ichain],**{key:val for key,val in profile_kwargs.items() if key in keywords_plot})
 			if labels[ichain] is not None: handles.append(patches.Patch(color=colors[ichain],label=labels[ichain],alpha=1))
 		if gaussian is not None:
 			plot_gaussian_profile(ax,gaussian['mean'][ipar1],gaussian['covariance'][ipar1][ipar1],**gaussian_profile_kwargs)
@@ -393,7 +329,11 @@ def plot_corner_chains(chains,params=[],labels=[],truths=[],gaussian=None,other_
 			if nrows-1-ipar2 >= ncols-1-ipar1: continue
 			ax = pyplot.subplot(gs[ipar2,ipar1])
 			for ichain,chain in enumerate(chains):
-				plot_density_contour(ax,[chain[par1],chain[par2]],color=colors[ichain],**contour_kwargs)
+				if not isinstance(chain,Mesh):
+					mesh = chain.to_mesh(params=[par1,par2],**{key:val for key,val in profile_kwargs.items() if key not in keywords_plot})
+				else: mesh = chain
+				(x,y),pdf = mesh(params=[par1,par2])
+				plot_density_contour(ax,x,y,pdf,color=colors[ichain],**contour_kwargs)
 			if gaussian is not None:
 				mean = [gaussian['mean'][ipar] for ipar in [ipar1,ipar2]]
 				covariance = [gaussian['covariance'][ipar][ipar] for ipar in [ipar1,ipar2]] + [gaussian['covariance'][ipar1][ipar2]]

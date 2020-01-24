@@ -28,21 +28,13 @@ def sample_cic(grid,data,weight=None):
 	if not isinstance(data,list): data = [data]
 	if weight is None: weight = scipy.ones_like(data[0])
 	pdf = scipy.zeros(map(len,grid),dtype=grid[0].dtype)
-	index,dindex = [],[]
-	for g,d in zip(grid,data):
-		i = scipy.clip(scipy.searchsorted(g,d,side='left')-1,0,len(g)-2)
-		index.append(i)
-		di = (d-g[i])/(g[i+1]-g[i])
-		#print di
-		assert ((di>=0.) & (di<=1.)).all()
-		dindex.append(di)
-	index = scipy.array(index).T
-	dindex = scipy.array(dindex).T
+	findex = scipy.array([scipy.searchsorted(g,d,side='right') - 1 for g,d in zip(grid,data)]).T
+	index = findex.astype(int)
+	dindex = findex-index
 	ishifts = scipy.array(scipy.meshgrid(*([[0,1]]*len(data)),indexing='ij')).reshape((len(data),-1)).T
 	for ishift in ishifts:
 		sindex = index + ishift
 		sweight = weight*scipy.prod((1-dindex) + ishift*(-1+2*dindex),axis=-1)
-		#print sweight
 		scipy.add.at(pdf,tuple(sindex.T),sweight)
 	return pdf
 

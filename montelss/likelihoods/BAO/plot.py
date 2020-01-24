@@ -13,7 +13,7 @@ from montelss.likelihoods.clustering.plot import *
 
 fiducial_params = dict(qiso=1.,sigmanl=5.)
 
-def plot_best_fit(likelihood,values,scale='klinklin',title='Best fit',plot_absolute=True,remove_sn=True,path='best_fit.png',save=True):
+def plot_best_fit(likelihood,values,scale='klinklin',title='Best fit',plot_absolute=False,remove_sn=True,path='best_fit.png',save=True):
 
 	def shotnoise(ell):
 		if (ell == 0) and remove_sn and not likelihood.remove_sn:

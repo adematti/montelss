@@ -72,6 +72,9 @@ class EffectAP(object):
 			window = MuFunction.load(path_mu)
 			self.logger.info('With resolution {:d} (k) x {:d} (mu).'.format(len(window.k),len(window.mu)))
 			window = window(self.k,self.mu)
+			norm = integrate.trapz(window,x=self.mu,axis=-1)/murange
+			self.logger.info('Renormalizing window(mu) by {:.4f} - {:.4f}.'.format(norm.min(),norm.max()))
+			window /= norm[:,None]
 			self.kernelcorrmu = scipy.asarray([(2.*ell+1.)*window*special.legendre(ell)(self.mumu) for ell in self.ells])/murange
 	
 	def set_input_model(self,modelref,modellin=None):

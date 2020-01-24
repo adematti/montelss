@@ -77,7 +77,16 @@ class Likelihood(object):
 		return 0.
 
 	def lnposterior(self,**kwargs):
-		return self.lnlkl(**kwargs) + self.lnprior(**kwargs)
+		toret = self.lnprior(**kwargs)
+		if not (scipy.isinf(toret) or scipy.isnan(toret)):
+			toret += self.lnlkl(**kwargs)
+		return toret
+
+	def lnpriors(self,**kwargs):
+		return [self.lnprior(**kwargs)]
+	
+	def lnlkls(self,**kwargs):
+		return [self.lnlkl(**kwargs)]
 
 	def chi2(self,**kwargs):
 		return -2.*self.lnposterior(**kwargs)
@@ -174,7 +183,7 @@ class Likelihood(object):
 		return self.__class__.loadstate(self.__dict__)
 		
 	def __radd__(self,other):
-		if other == 0: return self.copy()
+		if other == 0: return self #.copy()
 		return self.__add__(other)
 		       
 	def __add__(self,other):
@@ -185,12 +194,22 @@ class Likelihood(object):
 			new.sorted += [par for par in inst.sorted if par not in new.sorted]
 		new.nbins = self.nbins + other.nbins
 		def model(**kwargs):
+			#print id(new),id(self),id(other)
 			self.model(**kwargs)
 			other.model(**kwargs)
 		new.model = model
 		def lnposterior(**kwargs):
 			return self.lnposterior(**kwargs) + other.lnposterior(**kwargs)
 		new.lnposterior = lnposterior
+		def lnpriors(**kwargs):
+			return self.lnpriors(**kwargs) + other.lnpriors(**kwargs)
+		new.lnpriors = lnpriors
+		def lnlkls(**kwargs):
+			return self.lnlkls(**kwargs) + other.lnlkls(**kwargs)
+		new.lnlkls = lnlkls
+		def chi2(**kwargs):
+			return self.chi2(**kwargs) + other.chi2(**kwargs)
+		new.chi2 = chi2
 		def matrices_least_squares(*args,**kwargs):
 			P1,Q1 = self.matrices_least_squares(*args,**kwargs)
 			P2,Q2 = other.matrices_least_squares(*args,**kwargs)

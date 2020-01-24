@@ -24,19 +24,21 @@ class LikelihoodBAOSpectrum(BaseLikelihoodSpectrumMultipoles):
 			toret[par] = 0.
 			mpar = self.to_model_par(par)
 			for illin,ellin in enumerate(self.geometry.ellsin):
-				if re.match('a[p,m][0-9]',mpar) or re.match('a[p,m][0-9]_l{:d}'.format(ellin),mpar):
+				if re.match('a[p,m][0-9]$',mpar) or re.match('a[p,m][0-9]_l{:d}'.format(ellin),mpar):
 					def poly(*args,**kwargs):
-						toret = 0.*model_multipoles
-						toret[illin] = self.model_sp.polynomial(self.geometry.k,**{mpar:1.})*wiggles
-						return toret
-					self.geometry.set_input_model(*([poly]+self.params['models'][1:]))
+						tmp = 0.*model_multipoles
+						tmp[illin] = self.model_sp.polynomial(self.geometry.k,**{mpar.replace('_l{:d}'.format(ellin),''):1.})*wiggles
+						return [tmp] + [getattr(self.model_sp,model)(*args,**kwargs) for model in self.params['models'][1:]]
+					self.geometry.set_input_model(poly)
 					toret[par] += scipy.concatenate(self.geometry.spectrum_multipoles(**kwargs))
+
 		self.geometry.set_input_model(model_origin)
 		return toret
 	
 	def broadband_coeffs(self,ell=0,**kwargs):
-		if self.isiso: return {key for key in kwargs if re.match('a[p,m][0-9]',key)}
-		return {key.replace('_l{:d}'.format(ell),''):kwargs[key] for key in kwargs if re.match('a[p,m][0-9]_l{:d}'.format(ell),key)}
+		#if self.isiso: return {key:val for key,val in kwargs.items() if re.match('a[p,m][0-9]',key)}
+		#return {key.replace('_l{:d}'.format(ell),''):val for key,val in kwargs.items() if re.match('a[p,m][0-9]_l{:d}'.format(ell),key)}
+		return {key.replace('_l{:d}'.format(ell),''):val for key,val in kwargs.items() if re.match('a[p,m][0-9]',key)}
 
 	@property
 	def isiso(self):
@@ -68,7 +70,7 @@ class LikelihoodBAOSpectrum(BaseLikelihoodSpectrumMultipoles):
 			toret = [model(self.geometry.k,*args,**kwargs) for model in models]
 			if not issmooth: wiggles = self.model_sp.wiggles_damped_iso(self.geometry.k/kwargs.get('qiso',1.),sigmanl=kwargs.get('sigmanl',0.))
 			else: wiggles = 1.
-			toret[0] += self.model_sp.polynomial(self.geometry.k,*args,**kwargs)*wiggles
+			toret[0] += self.model_sp.polynomial(self.geometry.k,**self.broadband_coeffs(ell=0,**kwargs))*wiggles
 			return toret
 		self.geometry.set_input_model(spectrum_multipoles)
 

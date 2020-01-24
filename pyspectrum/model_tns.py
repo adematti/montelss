@@ -9,12 +9,13 @@ import utils
 
 class ModelTNS(BasePowerSpectrumModel):
 
-	TERMS = ['spectrum_lin','spectrum_nowiggle','spectrum_2loop_dd','spectrum_2loop_dt','spectrum_2loop_tt','spectrum_1loop_dd','spectrum_1loop_dt','spectrum_1loop_tt','bias_1loop','A_1loop','A_2loop','B_1loop','B_2loop']
+	TERMS = ['spectrum_lin','spectrum_nowiggle','spectrum_halofit','spectrum_2loop_dd','spectrum_2loop_dt','spectrum_2loop_tt','spectrum_1loop_dd','spectrum_1loop_dt','spectrum_1loop_tt','bias_1loop','A_1loop','A_2loop','B_1loop','B_2loop']
 	logger = logging.getLogger('ModelTNS')
 
 	def setup(self,nloop=2):
 		self.set_cosmology()
 		self.set_spectrum_lin()
+		self.set_spectrum_nonlin()
 		if nloop >= 1:
 			self.set_spectrum_1loop()
 			self.set_bias_1loop()

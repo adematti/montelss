@@ -114,18 +114,18 @@ class Minimizer(object):
 		self.bestfit['sorted'] = self.sorted
 		
 	def set_dbestfit(self):
-		self.dbestfit = {'values':{},'errors':{},'sorted':[]}
+		self.dbestfit = {'values':{},'errors':{},'sorted':[],'params':{}}
 		if 'minos' in self.bestfit: self.dbestfit['minos'] = {'upper':{},'lower':{}}
 		for likelihood in self.likelihoods:
-			values,errors,scalecov,latex,sorted = likelihood.derived_parameters(self.bestfit['values'],errors=self.bestfit['errors'])
+			values,errors,latex,sorted,params = likelihood.derived_parameters(self.bestfit['values'],errors=self.bestfit['errors'])
 			self.dbestfit['values'].update(values)
 			self.dbestfit['errors'].update(errors)
+			self.dbestfit['params'].update(params)
 			self.dbestfit['sorted'] += [par for par in sorted if par not in self.dbestfit['sorted']]
 			self.latex.update(latex)
 			if 'minos' in self.dbestfit:
 				for uplow in ['upper','lower']:
 					self.dbestfit['minos'][uplow].update(likelihood.derived_parameters(self.bestfit['values'],errors=self.bestfit['minos'][uplow])[1])
-		self.dbestfit['scalecov'] = scalecov
 		for key in ['chi2','rchi2']: self.dbestfit[key] = self.bestfit[key]
 
 	@utils.classparams

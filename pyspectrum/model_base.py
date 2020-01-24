@@ -27,7 +27,7 @@ def damping(kmin=1e-5,kmax=1.):
 class BasePowerSpectrumModel(object):
 
 	TYPE_FLOAT = scipy.float64
-	TERMS = ['spectrum_lin','spectrum_nowiggle']
+	TERMS = ['spectrum_lin','spectrum_nowiggle','spectrum_halofit']
 	logger = logging.getLogger('Model')
 	
 	def __init__(self,**params):
@@ -47,23 +47,22 @@ class BasePowerSpectrumModel(object):
 		self.cosmo.set_params(**Class)
 
 	@utils.classparams
-	def set_spectrum_lin(self,kin,redshift=0.,cb=True):
-		if cb:
-			self.logger.info('Computing power spectrum of cold dark matter and baryons.')
-			fun_pk = self.cosmo.compute_pk_cb_lin
-			fun_sigma8 = self.cosmo.sigma8_cb
-		else:
-			self.logger.info('Computing matter power spectrum.')
-			fun_pk = self.cosmo.compute_pk_lin
-			fun_sigma8 = self.cosmo.sigma8
-		self.spectrum_lin = SpectrumLin()
-		self.spectrum_lin['k'] = scipy.asarray(kin,dtype=self.TYPE_FLOAT)
+	def set_spectrum_lin(self,kin,redshift=0.,cb=False):
 		self.logger.info('Calculating the linear power spectrum at redshift z = {:.4f}.'.format(redshift))
 		self.logger.info('Cosmological parameters: {}.'.format(self.cosmo.params))
-		self.spectrum_lin['pk'] = fun_pk(self.spectrum_lin['k'],z=redshift)
-		self.sigma8 = fun_sigma8()
+		self.spectrum_lin = SpectrumLin()
+		self.spectrum_lin['k'] = scipy.asarray(kin,dtype=self.TYPE_FLOAT)
+		self.spectrum_lin['pk'] = self.cosmo.compute_pk(self.spectrum_lin['k'],z=redshift,cb=cb,nonlinear='')
+		self.sigma8 = self.cosmo.compute_sigma8(z=redshift,cb=cb)
 		self.spectrum_nowiggle = SpectrumNoWiggle(k=self.spectrum_lin['k'])
 		self.spectrum_nowiggle.run_terms(pk=self.spectrum_lin['pk'],n_s=self.cosmo.n_s(),h=self.cosmo.h(),Omega_m=self.cosmo.Omega_m(),Omega_b=self.cosmo.Omega_b(),T_cmb=self.cosmo.T_cmb())
+
+	@utils.classparams
+	def set_spectrum_nonlin(self,kin,redshift=0.,cb=False):
+		self.spectrum_halofit = SpectrumLin()
+		self.spectrum_halofit['k'] = scipy.asarray(kin,dtype=self.TYPE_FLOAT)
+		self.spectrum_halofit['k'] = self.spectrum_halofit['k'][(self.spectrum_halofit['k']>1e-4)]
+		self.spectrum_halofit['pk'] = self.cosmo.compute_pk(self.spectrum_halofit['k'],z=redshift,cb=cb,nonlinear='halofit')
 
 	def to_redshift(self,redshift=0.):
 		# WARNING: Unable to tackle correctly A and B terms

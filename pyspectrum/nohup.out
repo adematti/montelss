@@ -1,0 +1,10 @@
+
+** (gedit:11602): WARNING **: Could not load theme icon gtk-home: Icon 'gtk-home' not present in theme
+
+(gedit:11602): GLib-GObject-CRITICAL **: g_object_unref: assertion `G_IS_OBJECT (object)' failed
+
+** (gedit:11602): WARNING **: Could not load theme icon system-file-manager: Icon 'system-file-manager' not present in theme
+
+** (gedit:11602): WARNING **: Throbber animation not found
+
+** (gedit:11602): WARNING **: Throbber fallback animation not found either

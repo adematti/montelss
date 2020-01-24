@@ -39,8 +39,8 @@ scalings['kloglog'] = {'func':lambda x,y: (x,y),'xlabel':utils.plot_xlabel(estim
 scalings['klogk2log'] = {'func':lambda x,y: (x,x**2*y),'xlabel':utils.plot_xlabel(estimator='spectrum'),'ylabel':'$k^{2}P_{{\\ell}}(k)$ [$\\mathrm{Mpc} \ h^{-1}$]','xscale':'log','yscale':'log','xlim':[1e-3,1]}
 scalings['kloglin'] = {'func':lambda x,y: (x,y),'xlabel':utils.plot_xlabel(estimator='spectrum'),'ylabel':'$P_{{\\ell}}(k)$ [$(\\mathrm{Mpc} \ h^{-1})^{3}$]','xscale':'log','yscale':'linear','xlim':[1e-3,1]}
 scalings['klogklin'] = {'func':lambda x,y: (x,x*y),'xlabel':utils.plot_xlabel(estimator='spectrum'),'ylabel':'$kP_{{\\ell}}(k)$ [$(\\mathrm{Mpc} \ h^{-1})^{2}$]','xscale':'log','yscale':'linear','xlim':[1e-3,1]}
-fiducial_params = dict(f=0.75,b1=2.,b2=1.,sigmav=4,FoG='lorentzian2')
-#fiducial_params = dict(f=0.8,b1=1.4,b2=1.,sigmav=4,FoG='lorentzian2')
+#fiducial_params = dict(f=0.75,b1=2.,b2=1.,sigmav=4,FoG='lorentzian2')
+fiducial_params = dict(f=0.8,b1=1.4,b2=1.,sigmav=4,FoG='lorentzian2')
 
 def sort_legend(ax,**kwargs):
 	handles,labels = ax.get_legend_handles_labels()
@@ -79,7 +79,6 @@ def plot_effect_ap_vary(parameters,scale='klinklin',title='Alcock-Paczynski',pat
 	for ill,ell in enumerate(effect_ap.ells):
 		params = utils.plot_params(mode='multipole',ell=(ill,ell))
 		tmp = [effect_ap.spectrum_multipoles(f=fgrid[0],qpar=qpar,qper=qper,**kwargs)[0][ill] for qpar,qper in qgrid]
-		#ax.plot(*scaling['func'](effect_ap.k,tmp[0]),label=utils.text_to_latex(ell))
 		ax.fill_between(effect_ap.k,scaling['func'](effect_ap.k,tmp[1])[1],scaling['func'](effect_ap.k,tmp[2])[1],facecolor=params['color'],alpha=0.3,linewidth=0,label=params['label'])
 		tmp = [effect_ap.spectrum_multipoles(f=f,qpar=qgrid[0][0],qper=qgrid[0][1],**kwargs)[0][ill] for f in fgrid[1:]]
 		ax.fill_between(effect_ap.k,scaling['func'](effect_ap.k,tmp[0])[1],scaling['func'](effect_ap.k,tmp[1])[1],facecolor=params['color'],alpha=0.6,linewidth=0)
@@ -107,7 +106,7 @@ def plot_effect_ap_multipoles(parameters,scale='klinklin',title='Multipoles',pat
 
 def plot_mu_function(parameters,scale='klinlin',title='$\\mu$ function',path='window_KMU.png'):
 
-	window = MuFunction.load(parameters['MuFunction']['save'])
+	window = MuFunction.load(parameters['WindowFunctionKMU']['save'])
 	k = window.k
 	mu = window.mu
 	#k = [0.,0.01]

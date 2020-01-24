@@ -7,6 +7,7 @@ from matplotlib.ticker import AutoMinorLocator,LogLocator,FixedLocator,NullForma
 from matplotlib import cm
 from matplotlib.colors import Normalize
 from matplotlib import gridspec
+import pyspectrum
 from pyspectrum import *
 from montelss.likelihoods.clustering import utils
 from montelss.likelihoods.clustering.plot import *
@@ -40,6 +41,21 @@ scalings['kloglin'] = {'func':lambda x,y: (x,y),'xlabel':utils.plot_xlabel(estim
 scalings['klogklin'] = {'func':lambda x,y: (x,x*y),'xlabel':utils.plot_xlabel(estimator='spectrum'),'ylabel':'$kP_{{\\ell}}(k)$ [$(\\mathrm{Mpc} \ h^{-1})^{2}$]','xscale':'log','yscale':'linear','xlim':[1e-3,1]}
 #fiducial_params = dict(f=0.75,b1=2.,b2=1.,sigmav=4,FoG='lorentzian2')
 fiducial_params = dict(f=0.8,b1=1.4,b2=1.,sigmav=4,FoG='lorentzian2')
+
+def plot_model_tns_spectrum_nloop(parameters,nloop=2,scale='klinklin',title='RegPT outputs',path='spectrum_{:d}loop.png'):
+	
+	model = ModelTNS.load(parameters['ModelTNS']['save'])
+	scaling = scalings[scale]
+	ax = plot_baseline(scaling,title)
+
+	for key,label in zip(['dd','dt','tt'],['pk_dd','pk_dt','pk_tt']):
+		k = getattr(model,'spectrum_{:d}loop_{}'.format(nloop,key))['k']
+		pk = getattr(model,'spectrum_{:d}loop_{}'.format(nloop,key)).pk()
+		ax.plot(*scaling['func'](k,pk),label=pyspectrum.utils.text_to_latex(label),linestyle='-')
+	ax.plot(*scaling['func'](model.spectrum_halofit['k'],model.spectrum_halofit.pk()),label='halofit',linestyle='-')
+
+	ax.legend(**{'loc':1,'ncol':2,'fontsize':labelsize,'framealpha':0.5,'frameon':False})
+	utils.savefig(path.format(nloop),dpi=dpi,bbox_inches='tight',pad_inches=0.1)
 	
 def plot_best_fit(likelihood,values,scale='klinklin',title='Best fit',remove_sn=True,path='best_fit.png',save=False):
 

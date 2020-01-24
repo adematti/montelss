@@ -1,0 +1,46 @@
+
+** (gedit:20730): WARNING **: Could not load theme icon gtk-home: Icon 'gtk-home' not present in theme
+
+(gedit:20730): GLib-GObject-CRITICAL **: g_object_unref: assertion `G_IS_OBJECT (object)' failed
+
+** (gedit:20730): WARNING **: Could not load theme icon system-file-manager: Icon 'system-file-manager' not present in theme
+
+** (gedit:20730): WARNING **: Throbber animation not found
+
+** (gedit:20730): WARNING **: Throbber fallback animation not found either
+gedit: Fatal IO error 11 (Resource temporarily unavailable) on X server iclust:18.0.
+
+** (gedit:29866): WARNING **: Could not load theme icon gtk-home: Icon 'gtk-home' not present in theme
+
+(gedit:29866): GLib-GObject-CRITICAL **: g_object_unref: assertion `G_IS_OBJECT (object)' failed
+
+** (gedit:29866): WARNING **: Could not load theme icon system-file-manager: Icon 'system-file-manager' not present in theme
+
+** (gedit:29866): WARNING **: Throbber animation not found
+
+** (gedit:29866): WARNING **: Throbber fallback animation not found either
+end from FAM server connection
+end from FAM server connection
+end from FAM server connection
+gedit: Fatal IO error 11 (Resource temporarily unavailable) on X server iclust:12.0.
+
+** (gedit:5664): WARNING **: Could not load theme icon gtk-home: Icon 'gtk-home' not present in theme
+
+(gedit:5664): GLib-GObject-CRITICAL **: g_object_unref: assertion `G_IS_OBJECT (object)' failed
+
+** (gedit:5664): WARNING **: Could not load theme icon system-file-manager: Icon 'system-file-manager' not present in theme
+
+** (gedit:5664): WARNING **: Throbber animation not found
+
+** (gedit:5664): WARNING **: Throbber fallback animation not found either
+
+** (gedit:25351): WARNING **: Could not load theme icon gtk-home: Icon 'gtk-home' not present in theme
+
+(gedit:25351): GLib-GObject-CRITICAL **: g_object_unref: assertion `G_IS_OBJECT (object)' failed
+
+** (gedit:25351): WARNING **: Could not load theme icon system-file-manager: Icon 'system-file-manager' not present in theme
+
+** (gedit:25351): WARNING **: Throbber animation not found
+
+** (gedit:25351): WARNING **: Throbber fallback animation not found either
+gedit: Fatal IO error 11 (Resource temporarily unavailable) on X server iclust:10.0.
